@@ -1,9 +1,14 @@
 version: '3.8'
 services:
-  # MLflow Server
   mlflow_server:
     build: ./mlflow_server
     container_name: mlflow_server
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     command: >
       mlflow server
       --backend-store-uri postgresql://mlflow:mlflow@db:5432/mlflow
@@ -39,6 +44,12 @@ services:
   fastapi_tourism_app:
     build: ./fastapibaru
     container_name: fastapi_tourism_app
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - AWS_ACCESS_KEY_ID=minioadmin

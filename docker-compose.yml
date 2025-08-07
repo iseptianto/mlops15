@@ -1,6 +1,56 @@
 version: '3.8'
 
 services:
+  # MLflow Server
+  mlflow_server:
+    build: ./mlflow_server
+    container_name: mlflow_server
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://mlflow:mlflow@db:5432/mlflow
+      --default-artifact-root s3://mlflow/
+      --host 0.0.0.0
+      --port 5001
+    environment:
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    depends_on:
+      - db
+      - minio
+    ports:
+      - "5001:5001"
+
+  # Model Trainer
+  model_tourism_trainer:
+    build: ./modelbaru
+    container_name: model_tourism_trainer
+    command: "sh -c 'python generate_dummy_pickle.py && python register_model.py'"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    depends_on:
+      - mlflow_server
+    volumes:
+      - ./modelbaru:/app
+
+  # FastAPI App
+  fastapi_tourism_app:
+    build: ./fastapibaru
+    container_name: fastapi_tourism_app
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    depends_on:
+      - mlflow_server
+      - model_tourism_trainer
+    ports:
+      - "8101:8000"
+services:
   # PostgreSQL database untuk MLflow
   db:
     image: postgres:13
@@ -26,27 +76,6 @@ services:
       sh -c "mkdir -p /data/mlflow && minio server /data --console-address ':9001'"
     volumes:
       - mlflow_minio_data:/data
-
-
-  # MLflow Server
-  mlflow_server:
-    build: ./mlflow_server
-    container_name: mlflow_server
-    command: >
-      mlflow server
-      --backend-store-uri postgresql://mlflow:mlflow@db:5432/mlflow
-      --default-artifact-root s3://mlflow/
-      --host 0.0.0.0
-      --port 5001
-    environment:
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
-      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-    depends_on:
-      - db
-      - minio
-    ports:
-      - "5001:5001"
 
   # FastAPI untuk model Iris
   # fastapi_app:
@@ -75,37 +104,8 @@ services:
   #   depends_on:
   #     - db
   #     - minio
-  
 
-  model_tourism_trainer:
-    build:
-      context: ./modelbaru
-    container_name: model_tourism_trainer
-    command: "sh -c 'python generate_dummy_pickle.py && python register_model.py'"
-    environment:
-      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
-      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-    depends_on:
-      - mlflow_server
-    volumes:
-      - ./modelbaru:/app/models  # ✅ Complete source:destination mapping
 
-  fastapi_tourism_app:
-  build: 
-    context: ./fastapibaru
-    dockerfile: Dockerfile
-    environment:
-      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
-      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-    depends_on:
-      - mlflow_server
-      - model_tourism_trainer  # ✅ Tunggu model training selesai
-    ports:
-      - "8101:8000"
   # Prometheus
   prometheus_server:
     image: prom/prometheus:v2.45.0

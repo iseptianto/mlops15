@@ -91,7 +91,7 @@ services:
       - ./modelbaru:/app  # Mount untuk persist pickle files
 
   fastapi_tourism_app:
-    build: ./app/api
+    build: fastapibaru/app/api
     container_name: fastapi_tourism_app
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001

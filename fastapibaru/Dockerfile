@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY ./app/api/main.py /app/api/main.py
 
 # Salin folder model ke dalam kontainer
-COPY /modelbaru
+COPY ./app
 # COPY /modelbaru/place_id_map.pkl 
 # COPY /modelbaru/prediction_matrix_best.pkl 
 # COPY /modelbaru/user_id_map.pkl 

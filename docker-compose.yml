@@ -1,0 +1,53 @@
+
+version: '3.8'
+
+services:
+  fastapi_recommender:
+    build:
+      context: ./fastapibaru # Sesuaikan dengan folder FastAPI baru
+      dockerfile: Dockerfile
+    ports:
+      - "8000:80" # Ganti port sesuai kebutuhan jika 80 sudah terpakai
+    volumes:
+      - ./modelbaru:/app/models # Sesuaikan path lokal ke folder model baru
+      - ./fastapibaru/app:/app/app # Sesuaikan path lokal ke folder app di fastapibaru
+    environment:
+      - MODELS_DIR=/app/models # Environment variable di dalam container untuk lokasi model
+    depends_on:
+      - prometheus
+    networks:
+      - recommender_network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml # Sesuaikan path konfigurasi Prometheus
+      - prometheus_data:/prometheus # Penyimpanan data Prometheus
+    ports:
+      - "9090:9090"
+    command: --config.file=/etc/prometheus/prometheus.yml
+    networks:
+      - recommender_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    volumes:
+      - grafana_data:/var/lib/grafana # Penyimpanan data Grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards # Opsional: Mount dashboard
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources # Opsional: Mount datasource
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - recommender_network
+
+volumes:
+  prometheus_data: {}
+  grafana_data: {}
+
+networks:
+  recommender_network:
+    driver: bridge

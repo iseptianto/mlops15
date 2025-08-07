@@ -77,7 +77,7 @@ services:
       - minio
   model_tourism_trainer:
     build:
-      context: ./model/model_tourism
+      context: ./modelbaru
     container_name: model_tourism_trainer
     command: ["python", "generate_dummy_pickle.py", "&&", "python", "register_model.py"]
     environment:
@@ -88,7 +88,7 @@ services:
     depends_on:
       - mlflow_server
     volumes:
-      - ./model/model_tourism:/app  # Mount untuk persist pickle files
+      - ./modelbaru:/app  # Mount untuk persist pickle files
 
   fastapi_tourism_app:
     build: ./app/api

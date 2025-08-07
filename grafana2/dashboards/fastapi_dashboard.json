@@ -21,7 +21,31 @@
   "graphTooltip": 0,
   "id": null,
   "links": [],
-  "panels": [], # Panels will be added later
+  
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(model_predictions_total[5m])",
+          "legendFormat": "Requests/sec"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Response Time",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, model_prediction_duration_seconds_bucket)",
+          "legendFormat": "95th percentile"
+        }
+      ]
+    }
+  ],
   "refresh": "15s",
   "schemaVersion": 37,
   "tags": [],

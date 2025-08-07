@@ -1,7 +1,11 @@
-
+# fastapibaru/requirements.txt kurang dependencies
 fastapi
 uvicorn[standard]
 pandas
 numpy
 scikit-learn
 geopy
+# MISSING:
+prometheus-client  # Untuk metrics
+pydantic          # Untuk validation
+python-multipart  # Untuk form data

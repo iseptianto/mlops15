@@ -4,47 +4,42 @@ version: '3.8'
 services:
   # Tambahkan MLflow untuk model registry
   mlflow:
-    image: python:3.9-slim
+  image: python:3.9-slim
     command: mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts --host 0.0.0.0
     ports:
       - "5000:5000"
     volumes:
       - mlflow_data:/mlflow
-
-      
   fastapi_recommender:
     build:
-      context: ./fastapibaru # Sesuaikan dengan folder FastAPI baru
+      context: ./fastapibaru
       dockerfile: Dockerfile
     ports:
-      - "8000:80" # Ganti port sesuai kebutuhan jika 80 sudah terpakai
+      - "8000:80"
     volumes:
-      - ./modelbaru:/app/models # Sesuaikan path lokal ke folder model baru
-      - ./fastapibaru/app:/app/app # Sesuaikan path lokal ke folder app di fastapibaru
+      - ./modelbaru:/app/models
+      - ./fastapibaru/app:/app/app
     environment:
-      - MODELS_DIR=/app/models # Environment variable di dalam container untuk lokasi model
-    depends_on:
-      - prometheus
-    networks:
-      - recommender_network
-  fastapi_recommender:
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          memory: 1G
-          cpus: '0.5'
-        reservations:
-          memory: 512M
-          cpus: '0.25'
+      - MODELS_DIR=/app/models
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - recommender_network
+      deploy:
+      resources:
+        limits:
+          memory: 2G      # Recommender systems need more memory
+          cpus: '1.0'     # At least 1 CPU
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    restart: unless-stopped
       
   nginx:
-    image: nginx:alpine
+  image: nginx:alpine
     ports:
       - "80:80"
     volumes:

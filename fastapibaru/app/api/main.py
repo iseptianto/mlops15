@@ -14,7 +14,25 @@ import prometheus_client
 # Tambahkan authentication
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, HTTPException
+# FastAPI tidak mengekspos /metrics endpoint untuk Prometheus
+# Perlu ditambahkan:
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+# MASALAH 1: Import time module hilang
+start_time = time.time()  # time module tidak di-import!
+
+# MASALAH 2: Fungsi is_valid_token tidak didefinisikan
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not is_valid_token(credentials.credentials):  # Fungsi ini tidak ada!
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# MASALAH 3: Duplikasi endpoint /recommend/user
+@app.post("/recommend/user")  # Pertama
+async def recommend_user_endpoint(request: RecommendationRequest, token: str = Depends(verify_token)):
+    
 security = HTTPBearer()
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):

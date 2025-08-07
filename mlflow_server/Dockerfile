@@ -1,20 +1,18 @@
-# Instead of building from scratch, use pre-built images
-# mlflow_server/Dockerfile
 FROM python:3.9-slim
 
-# Install system dependencies first
+WORKDIR /app
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
+# Copy and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-# Copy everything else
+# Copy project files
 COPY . .
 
-# Default command
+# Default command (akan di-override oleh docker-compose)
 CMD ["mlflow", "server", "--help"]

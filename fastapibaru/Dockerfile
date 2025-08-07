@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY ./app/api/main.py /app/api/main.py
 
 # Salin folder model ke dalam kontainer
-COPY /modelbaru
+COPY modelbaru
 
 # Ekspos port yang akan digunakan oleh FastAPI (sesuai dengan yang di-bind di docker-compose)
 EXPOSE 80

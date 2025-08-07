@@ -75,11 +75,13 @@ services:
   #   depends_on:
   #     - db
   #     - minio
+  
+
   model_tourism_trainer:
     build:
-      context: modelbaru
+      context: ./modelbaru
     container_name: model_tourism_trainer
-    command: ["python", "generate_dummy_pickle.py", "&&", "python", "register_model.py"]
+    command: "sh -c 'python generate_dummy_pickle.py && python register_model.py'"
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - AWS_ACCESS_KEY_ID=minioadmin
@@ -88,11 +90,12 @@ services:
     depends_on:
       - mlflow_server
     volumes:
-      - ./modelbaru  # Mount untuk persist pickle files
+      - ./modelbaru:/app/models  # ✅ Complete source:destination mapping
 
   fastapi_tourism_app:
-    build: fastapibaru/app/api
-    container_name: fastapi_tourism_app
+  build: 
+    context: ./fastapibaru
+    dockerfile: Dockerfile
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - AWS_ACCESS_KEY_ID=minioadmin

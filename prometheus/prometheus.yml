@@ -25,5 +25,4 @@ scrape_configs:
     # scheme defaults to 'http'.
 
     static_configs:
-        - targets: ["fastapi_recommender:80"]  # Port 80 di internal container
-
+        - targets: ["fastapi_tourism_app:8000"]  # ✅ Correct service name

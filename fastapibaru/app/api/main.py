@@ -56,7 +56,7 @@ user_rated_items_train = {}
 models_loaded = False
 
 # Load models and data
-MODELS_DIR = os.getenv("MODELS_DIR", "/app/models")
+MODELS_DIR = os.getenv("MODELS_DIR", "/app")  # ✅ Match dengan workdir
 
 def load_models_and_data():
     """Load all required models and data"""

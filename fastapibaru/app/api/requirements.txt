@@ -1,8 +1,9 @@
+# fastapibaru/app/api/requirements.txt
 fastapi
 pandas
 scikit-learn
 numpy
-prometheus-fastapi-instrumentator
+prometheus-client  # ✅ Add missing dependency
 python-multipart
 mlflow
 boto3

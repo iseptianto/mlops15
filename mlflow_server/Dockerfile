@@ -3,5 +3,5 @@ FROM python:3.9-slim
 
 WORKDIR /mlflow_server
 
-COPY requirements.txt .
+COPY ./mlflow_server /mlflow_server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

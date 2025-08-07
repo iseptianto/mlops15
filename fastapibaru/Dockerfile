@@ -12,10 +12,10 @@ COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Salin seluruh isi folder aplikasi FastAPI ke direktori kerja di kontainer
-COPY ./app /app/app
+COPY ../app/api
 
 # Salin folder model ke dalam kontainer
-COPY ../modelbaru /app/models # Sesuaikan path lokal jika berbeda
+COPY ../modelbaru
 
 # Ekspos port yang akan digunakan oleh FastAPI (sesuai dengan yang di-bind di docker-compose)
 EXPOSE 80

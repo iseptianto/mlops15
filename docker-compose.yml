@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   # MLflow Server
   mlflow_server:
@@ -50,8 +49,7 @@ services:
       - model_tourism_trainer
     ports:
       - "8101:8000"
-services:
-  # PostgreSQL database untuk MLflow
+
   db:
     image: postgres:13
     container_name: mlflow_db

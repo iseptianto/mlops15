@@ -8,6 +8,44 @@ from geopy.distance import geodesic
 import os
 from sklearn.metrics.pairwise import cosine_similarity # Import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer # Import TfidfVectorizer
+# Tambahkan custom metrics di FastAPI
+from prometheus_client import Counter, Histogram, Gauge
+import prometheus_client
+# Tambahkan authentication
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException
+
+security = HTTPBearer()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    # Implement token verification
+    if not is_valid_token(credentials.credentials):
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return credentials.credentials
+
+@app.post("/recommend/user")
+async def recommend_user_endpoint(
+    request: RecommendationRequest,
+    token: str = Depends(verify_token)
+):
+    # Your code here
+# Custom metrics
+prediction_counter = Counter('model_predictions_total', 'Total predictions made')
+prediction_latency = Histogram('model_prediction_duration_seconds', 'Time spent on prediction')
+model_accuracy = Gauge('model_current_accuracy', 'Current model accuracy')
+data_drift_score = Gauge('data_drift_score', 'Data drift detection score')
+
+@app.post("/recommend/user")
+async def recommend_user_endpoint(request: RecommendationRequest):
+    start_time = time.time()
+    
+    # Your existing code...
+    
+    # Record metrics
+    prediction_counter.inc()
+    prediction_latency.observe(time.time() - start_time)
+    
+    return response
 
 # --- Load Models and Data ---
 MODELS_DIR = os.getenv("MODELS_DIR", "/app/models") # Default to /app/models inside container

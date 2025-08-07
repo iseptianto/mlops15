@@ -12,7 +12,7 @@ COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Salin seluruh isi folder aplikasi FastAPI ke direktori kerja di kontainer
-COPY ./app/api
+COPY ./app/api/main.py
 
 # Salin folder model ke dalam kontainer
 COPY ../modelbaru

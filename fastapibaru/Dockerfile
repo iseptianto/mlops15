@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Salin file requirements.txt (jika ada) dan install dependensi
 # Asumsikan ada file requirements.txt di root folder fastapibaru
-COPY ./requirements.txt /app/requirements.txt
+COPY ./mlflow_server /mlflow_server/requirements.txt
 
 RUN pip install --no-cache-dir -r /app/requirements.txt
 

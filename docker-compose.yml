@@ -49,32 +49,32 @@ services:
       - "5001:5001"
 
   # FastAPI untuk model Iris
-  fastapi_app:
-    build: ./app
-    container_name: fastapi_app
-    environment:
-      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
-      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-    depends_on:
-      - mlflow_server
-    ports:
-      - "8100:8000"
+  # fastapi_app:
+  #   build: ./app
+  #   container_name: fastapi_app
+  #   environment:
+  #     - MLFLOW_TRACKING_URI=http://mlflow_server:5001
+  #     - AWS_ACCESS_KEY_ID=minioadmin
+  #     - AWS_SECRET_ACCESS_KEY=minioadmin
+  #     - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+  #   depends_on:
+  #     - mlflow_server
+  #   ports:
+  #     - "8100:8000"
 
-  # Model trainer untuk Iris
-  model_trainer:
-    container_name: model_trainer
-    build:
-      context: ./model
-    environment:
-      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
-      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-    depends_on:
-      - db
-      - minio
+  # # Model trainer untuk Iris
+  # model_trainer:
+  #   container_name: model_trainer
+  #   build:
+  #     context: ./model
+  #   environment:
+  #     - MLFLOW_TRACKING_URI=http://mlflow_server:5001
+  #     - AWS_ACCESS_KEY_ID=minioadmin
+  #     - AWS_SECRET_ACCESS_KEY=minioadmin
+  #     - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+  #   depends_on:
+  #     - db
+  #     - minio
   model_tourism_trainer:
     build:
       context: ./modelbaru

@@ -29,7 +29,7 @@ services:
   model_tourism_trainer:
     build: ./modelbaru
     container_name: model_tourism_trainer
-    command: "sh -c 'python generate_dummy_pickle.py && python register_model.py'"
+    # command: "sh -c 'python generate_dummy_pickle.py && python register_model.py'"
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - AWS_ACCESS_KEY_ID=minioadmin

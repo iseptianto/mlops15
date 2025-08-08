@@ -1,7 +1,9 @@
-
 import pickle
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.datasets import make_classification
 from sklearn.metrics.pairwise import cosine_similarity
 import os
 import time
@@ -11,27 +13,28 @@ print("🚀 Starting dummy model generation...")
 def wait_for_mlflow():
     """Wait for MLflow server to be ready"""
     import requests
+    import time
     
     mlflow_url = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_server:5001")
-    max_retries = 15
+    max_retries = 30
     retry_count = 0
     
     print(f"⏳ Waiting for MLflow server at {mlflow_url}...")
     
     while retry_count < max_retries:
         try:
-            response = requests.get(f"{mlflow_url}/health", timeout=5)
+            response = requests.get(f"{mlflow_url}/health")
             if response.status_code == 200:
                 print("✅ MLflow server is ready!")
                 return True
-        except:
+        except requests.RequestException:
             pass
         
         retry_count += 1
         print(f"⏳ MLflow not ready, retrying... ({retry_count}/{max_retries})")
-        time.sleep(3)
+        time.sleep(2)
     
-    print("❌ MLflow server not ready, proceeding anyway...")
+    print("❌ MLflow server not ready after 60 seconds")
     return False
 
 # Wait for MLflow to be ready
@@ -59,6 +62,7 @@ place_id_map = {place_id: idx for idx, place_id in enumerate(place_ids)}
 print(f"👥 Created {len(user_id_map)} users and {len(place_id_map)} places")
 
 # Generate collaborative filtering matrix (user-item predictions)
+# Simulate user preferences using some logic
 prediction_matrix = np.random.random((n_users, n_places))
 
 # Add some structure to make it more realistic
@@ -90,8 +94,8 @@ for i, place_id in enumerate(place_ids):
         'Category': np.random.choice(categories),
         'City': np.random.choice(cities),
         'Rating': np.random.uniform(3.0, 5.0),
-        'Lat': np.random.uniform(-10, 5),
-        'Long': np.random.uniform(95, 141)
+        'Lat': np.random.uniform(-10, 5),  # Indonesia latitude range
+        'Long': np.random.uniform(95, 141)  # Indonesia longitude range
     })
 
 tourism_df = pd.DataFrame(place_metadata)
@@ -163,4 +167,3 @@ for file in os.listdir('/app/models'):
     file_path = os.path.join('/app/models', file)
     size = os.path.getsize(file_path) / 1024  # KB
     print(f"  - {file} ({size:.1f} KB)")
-EOF

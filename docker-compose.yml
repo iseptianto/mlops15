@@ -1,9 +1,14 @@
 version: '3.8'
 services:
-    # MLflow Server with health check
   mlflow_server:
     build: ./mlflow_server
     container_name: mlflow_server
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
     command: >
       mlflow server
       --backend-store-uri postgresql://mlflow:mlflow@db:5432/mlflow
@@ -15,36 +20,12 @@ services:
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     depends_on:
-      db:
-        condition: service_healthy
-      minio:
-        condition: service_started
+      - db
+      - minio
     ports:
       - "5001:5001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
 
-  # Database with health check
-  db:
-    image: postgres:13
-    container_name: mlflow_db
-    environment:
-      - POSTGRES_USER=mlflow
-      - POSTGRES_PASSWORD=mlflow
-      - POSTGRES_DB=mlflow
-    volumes:
-      - mlflow_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mlflow"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Model trainer with proper dependency
+  # Model Trainer
   model_tourism_trainer:
     build: ./modelbaru
     container_name: model_tourism_trainer
@@ -55,11 +36,10 @@ services:
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     depends_on:
-      mlflow_server:
-        condition: service_healthy  # ✅ Wait for health check
+      - mlflow_server
     volumes:
       - ./modelbaru:/app
-    restart: "no"  # ✅ Don't restart on completion
+
   # FastAPI App
   fastapi_tourism_app:
     build: ./fastapibaru
@@ -81,6 +61,15 @@ services:
     ports:
       - "8101:8000"
 
+  db:
+    image: postgres:13
+    container_name: mlflow_db
+    environment:
+      - POSTGRES_USER=mlflow
+      - POSTGRES_PASSWORD=mlflow
+      - POSTGRES_DB=mlflow
+    volumes:
+      - mlflow_db_data:/var/lib/postgresql/data
 
   # MinIO sebagai S3 bucket
   minio:

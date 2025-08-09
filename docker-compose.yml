@@ -82,6 +82,7 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - AWS_EC2_METADATA_DISABLED=true
       - AWS_S3_ADDRESSING_STYLE=path
+      - MLFLOW_REGISTERED_MODEL=tourism-recommender-model
     depends_on:
       - mlflow_server
       - minio

@@ -235,11 +235,11 @@ def main():
         from mlflow.tracking import MlflowClient
         reg_name = (args.registered_model_name or os.getenv("MLFLOW_REGISTERED_MODEL","")).strip()
         if reg_name:
-        client = MlflowClient()
-        mv = next(int(m.version) for m in client.search_model_versions(f"name='{reg_name}'")
+            client = MlflowClient()
+            mv = next(int(m.version) for m in client.search_model_versions(f"name='{reg_name}'")
               if m.run_id == run.info.run_id)
-        client.set_registered_model_alias(reg_name, "production", mv)
-        print(f"Alias 'production' -> {reg_name} v{mv}")
+            client.set_registered_model_alias(reg_name, "production", mv)
+            print(f"Alias 'production' -> {reg_name} v{mv}")
 
         print("Run ID:", run.info.run_id)
         print("Metrics:", json.dumps(metrics, indent=2))

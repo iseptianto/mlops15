@@ -20,7 +20,7 @@ class RecsysModel(mlflow.pyfunc.PythonModel):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ratings_csv", default="/app/data/tourism_rating.csv")
+    ap.add_argument("--ratings_csv", default="/app/data/dataset.csv")
     ap.add_argument("--user_col", default="user_id")
     ap.add_argument("--item_col", default="place_id")
     ap.add_argument("--rating_col", default="rating")

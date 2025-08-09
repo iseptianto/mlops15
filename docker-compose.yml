@@ -90,7 +90,7 @@ services:
       - ./data:/app/data
     command: >
       python train_recsys.py
-      --ratings_csv /app/data/tourism_rating.csv
+      --ratings_csv /app/data/dataset.csv
       --target target
       --task auto
       --model rf

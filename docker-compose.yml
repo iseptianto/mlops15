@@ -27,18 +27,34 @@ services:
 
   # Model Trainer
   model_tourism_trainer:
-    build: ./modelbaru
-    container_name: model_tourism_trainer
-    # command: "sh -c 'python generate_dummy_pickle.py && python register_model.py'"
+    build:
+      context: ./modelbaru
+    container_name: modelbaru_trainer
     environment:
+      # MLflow
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - MLFLOW_EXPERIMENT=modelbaru
+      # optional: untuk auto-register (butuh backend DB di MLflow server)
+      # - MLFLOW_REGISTERED_MODEL=modelbaru
+      # MinIO / S3
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_EC2_METADATA_DISABLED=true
+      - AWS_S3_ADDRESSING_STYLE=path
     depends_on:
       - mlflow_server
+      - minio
     volumes:
-      - ./modelbaru:/app
+      - ./data:/app/data   # kalau kamu punya CSV lokal
+    command: >
+      python train.py
+      --data_csv /app/data/dataset.csv
+      --target target
+      --task auto
+      --model rf
+
 
   # FastAPI App
   fastapi_tourism_app:

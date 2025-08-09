@@ -1,11 +1,55 @@
 version: '3.8'
 services:
+  db:
+    image: postgres:13
+    container_name: mlflow_db
+    environment:
+      - POSTGRES_USER=mlflow
+      - POSTGRES_PASSWORD=mlflow
+      - POSTGRES_DB=mlflow
+    volumes:
+      - mlflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U mlflow -d mlflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio
+    container_name: mlflow_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    entrypoint: >
+      sh -c "minio server /data --console-address ':9001'"
+    volumes:
+      - mlflow_minio_data:/data
+    restart: unless-stopped
+
+  minio-mc:
+    image: minio/mc
+    depends_on:
+      - minio
+    environment:
+      - MC_HOST_local=http://minioadmin:minioadmin@minio:9000
+    entrypoint: >
+      sh -c "
+      until (mc ready local); do sleep 1; done &&
+      mc mb -p local/mlflow || true
+      "
+    restart: "no"
+
   mlflow_server:
     build: ./mlflow_server
     container_name: mlflow_server
     command: >
       mlflow server
-      --backend-store-uri postgresql://mlflow:mlflow@db:5432/mlflow
+      --backend-store-uri postgresql+psycopg2://mlflow:mlflow@db:5432/mlflow
       --default-artifact-root s3://mlflow/
       --host 0.0.0.0
       --port 5001
@@ -24,35 +68,7 @@ services:
     ports:
       - "5001:5001"
     restart: unless-stopped
-  minio:
-    image: minio/minio
-    container_name: mlflow_minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    entrypoint: >
-      sh -c "minio server /data --console-address ':9001'"
-    volumes:
-      - mlflow_minio_data:/data
 
-
-  minio-mc:
-    image: minio/mc
-    depends_on:
-      - minio
-    environment:
-      - MC_HOST_local=http://minioadmin:minioadmin@minio:9000
-    entrypoint: >
-      sh -c "
-      until (mc ready local); do sleep 1; done &&
-      mc mb -p local/mlflow || true
-      "
-
-
-  # Model Trainer
   model_tourism_trainer:
     build:
       context: ./modelbaru
@@ -66,30 +82,22 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - AWS_EC2_METADATA_DISABLED=true
       - AWS_S3_ADDRESSING_STYLE=path
-
     depends_on:
       - mlflow_server
       - minio
     volumes:
-      - ./data:/app/data   # kalau kamu punya CSV lokal
+      - ./data:/app/data
     command: >
       python train.py
       --data_csv /app/data/dataset.csv
       --target target
       --task auto
       --model rf
+    restart: "no"
 
-
-  # FastAPI App
   fastapi_tourism_app:
     build: ./fastapibaru
     container_name: fastapi_tourism_app
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - AWS_ACCESS_KEY_ID=minioadmin
@@ -100,62 +108,8 @@ services:
       - model_tourism_trainer
     ports:
       - "8101:8000"
+    restart: unless-stopped
 
-  db:
-    image: postgres:13
-    container_name: mlflow_db
-    environment:
-      - POSTGRES_USER=mlflow
-      - POSTGRES_PASSWORD=mlflow
-      - POSTGRES_DB=mlflow
-    volumes:
-      - mlflow_db_data:/var/lib/postgresql/data
-
-  # MinIO sebagai S3 bucket
-  minio:
-    image: minio/minio
-    container_name: mlflow_minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    entrypoint: >
-      sh -c "mkdir -p /data/mlflow && minio server /data --console-address ':9001'"
-    volumes:
-      - mlflow_minio_data:/data
-
-  # FastAPI untuk model Iris
-  # fastapi_app:
-  #   build: ./app
-  #   container_name: fastapi_app
-  #   environment:
-  #     - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-  #     - AWS_ACCESS_KEY_ID=minioadmin
-  #     - AWS_SECRET_ACCESS_KEY=minioadmin
-  #     - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-  #   depends_on:
-  #     - mlflow_server
-  #   ports:
-  #     - "8100:8000"
-
-  # # Model trainer untuk Iris
-  # model_trainer:
-  #   container_name: model_trainer
-  #   build:
-  #     context: ./model
-  #   environment:
-  #     - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-  #     - AWS_ACCESS_KEY_ID=minioadmin
-  #     - AWS_SECRET_ACCESS_KEY=minioadmin
-  #     - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-  #   depends_on:
-  #     - db
-  #     - minio
-
-
-  # Prometheus
   prometheus_server:
     image: prom/prometheus:v2.45.0
     container_name: prometheus_server
@@ -168,8 +122,8 @@ services:
       - fastapi_tourism_app
     ports:
       - "9090:9090"
+    restart: unless-stopped
 
-  # Grafana
   grafana_server:
     image: grafana/grafana:9.5.3
     container_name: grafana_server
@@ -185,8 +139,8 @@ services:
       - prometheus_server
     ports:
       - "3000:3000"
+    restart: unless-stopped
 
-  # NGINX Reverse Proxy (Hanya ini yang expose port ke localhost)
   nginx_load_balancer:
     image: nginx:alpine
     container_name: nginx_load_balancer
@@ -195,12 +149,12 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      # - fastapi_app
       - fastapi_tourism_app
       - mlflow_server
       - grafana_server
       - prometheus_server
       - minio
+    restart: unless-stopped
 
 volumes:
   mlflow_db_data:

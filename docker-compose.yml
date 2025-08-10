@@ -89,7 +89,7 @@ services:
     volumes:
       - ./data:/app/data
     command: >
-      python train.py
+      python train_recsys.py
       --data_csv /data/dataset.csv
       --target target
       --task auto

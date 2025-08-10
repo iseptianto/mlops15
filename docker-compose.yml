@@ -90,7 +90,7 @@ services:
       - ./data:/app/data
     command: >
       python train.py
-      --data_csv /app/data/dataset.csv
+      --data_csv /data/dataset.csv
       --target target
       --task auto
       --model rf

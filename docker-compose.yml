@@ -144,11 +144,10 @@ services:
 
   nginx_load_balancer:
     image: nginx:alpine
-    container_name: nginx_load_balancer
-    ports:
-      - "80:80"
+    ports: ["80:80"]
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro   # <— ini yg serve index.html
     depends_on:
       - fastapi_tourism_app
       - mlflow_server

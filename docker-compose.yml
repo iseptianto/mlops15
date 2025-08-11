@@ -13,7 +13,7 @@ services:
       test: ["CMD-SHELL","pg_isready -U mlflow -d mlflow"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
     restart: unless-stopped
 
   minio:
@@ -105,7 +105,10 @@ services:
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     depends_on:
-      - mlflow_server
+      mlflow_server:
+        condition: service_started 
+      minio:
+        condition: service_started      
       - model_tourism_trainer
     ports:
       - "8101:8000"

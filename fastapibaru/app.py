@@ -2,13 +2,13 @@
 # Run: uvicorn app:app --host 0.0.0.0 --port 8000
 import os
 import logging
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
 import mlflow
 from mlflow.exceptions import MlflowException
-from fastapi import FastAPI, HTTPException, Path, Body
+from fastapi import FastAPI, HTTPException, Query, Path, Body
 from pydantic import BaseModel
 
 # -----------------------------------------------------------------------------
@@ -51,10 +51,14 @@ model_info = {
     "error": None,
 }
 
-# Catalog (optional, buat cek user/place & UX API)
+# Catalog (opsional)
 known_users: Set[str] = set()
 known_places: Set[str] = set()
 user_seen: Dict[str, Set[str]] = {}
+
+# places.csv mapping
+PLACE_MAP: Dict[str, Dict[str, Any]] = {}
+PLACES_CSV_PATH = os.getenv("PLACES_CSV_PATH", "/app/data/places.csv")
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -67,36 +71,64 @@ def _normalize_pred_to_list_of_dict(pred) -> List[Dict[str, Any]]:
     # DataFrame -> records
     if isinstance(pred, pd.DataFrame):
         rows = pred.to_dict(orient="records")
-        return [
-            r if isinstance(r, dict) else {"place": str(r), "score": None}
-            for r in rows
-        ]
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            if isinstance(r, dict):
+                if "place" in r:
+                    r["place"] = str(r["place"])
+                    out.append(r)
+                else:
+                    out.append({"place": str(r), "score": None})
+            else:
+                out.append({"place": str(r), "score": None})
+        return out
+
     # Series -> list
     if isinstance(pred, pd.Series):
         pred = pred.astype(object).tolist()
+
     # numpy -> list
     if isinstance(pred, np.ndarray):
         pred = pred.tolist()
+
     # dict spesial (punya "recommendations")
     if isinstance(pred, dict):
         if "recommendations" in pred and isinstance(pred["recommendations"], (list, tuple)):
             seq = pred["recommendations"]
         else:
             seq = [pred]
-        return [
-            r if isinstance(r, dict) else {"place": str(r), "score": None}
-            for r in seq
-        ]
+        norm: List[Dict[str, Any]] = []
+        for r in seq:
+            if isinstance(r, dict):
+                if "place" in r:
+                    r = dict(r)
+                    r["place"] = str(r["place"])
+                    norm.append(r)
+                else:
+                    norm.append({"place": str(r), "score": None})
+            else:
+                norm.append({"place": str(r), "score": None})
+        return norm
+
     # list/tuple -> list of dicts
     if isinstance(pred, (list, tuple)):
-        return [
-            r if isinstance(r, dict) else {"place": str(r), "score": None}
-            for r in pred
-        ]
+        norm: List[Dict[str, Any]] = []
+        for r in pred:
+            if isinstance(r, dict):
+                r = dict(r)
+                if "place" in r:
+                    r["place"] = str(r["place"])
+                    norm.append(r)
+                else:
+                    norm.append({"place": str(r), "score": None})
+            else:
+                norm.append({"place": str(r), "score": None})
+        return norm
+
     # fallback scalar
     return [{"place": str(pred), "score": None}]
 
-def _extract_catalog_from_model(loaded_model):
+def _extract_catalog_from_model(loaded_model) -> Tuple[Set[str], Set[str], Dict[str, Set[str]]]:
     """
     Ambil daftar user & place dari python_model (kalau trainer menyimpan user_seen/popular).
     Cocok dengan trainer recsys yang kita buat (punya .user_seen & .popular).
@@ -109,8 +141,7 @@ def _extract_catalog_from_model(loaded_model):
             return users, places, seen_map
 
         if hasattr(py_model, "user_seen"):
-            # dict[str -> set[str]]
-            raw = py_model.user_seen
+            raw = py_model.user_seen  # dict[user_id] -> set(place_id)
             seen_map = {str(k): set(map(str, v)) for k, v in raw.items()}
             users = set(seen_map.keys())
             for s in seen_map.values():
@@ -170,13 +201,66 @@ def _load_mlflow_model():
         model_info.update({"status": "error", "error": msg})
         logging.error(f"❌ {msg}")
 
+def _load_places_csv(path: str = PLACES_CSV_PATH) -> int:
+    """Load mapping place_id -> metadata ke PLACE_MAP. Return jumlah entri."""
+    global PLACE_MAP, known_places
+    PLACE_MAP = {}
+    try:
+        if not os.path.exists(path):
+            logging.warning(f"places.csv not found at {path}")
+            return 0
+        df = pd.read_csv(path)
+
+        # normalisasi kolom
+        cols = {c.lower().strip(): c for c in df.columns}
+        pid = cols.get("place_id")
+        if not pid:
+            raise ValueError("places.csv must contain 'place_id' column")
+        pname = cols.get("place_name")
+        cat = cols.get("category")
+        city = cols.get("city")
+        lat = cols.get("lat")
+        lng = cols.get("long") or cols.get("lng") or cols.get("longitude")
+
+        for _, r in df.iterrows():
+            k = str(r[pid])
+            meta = {"place": k}
+            if pname and pname in r: meta["name"] = r[pname]
+            if cat and cat in r:     meta["category"] = r[cat]
+            if city and city in r:   meta["city"] = r[city]
+            if lat and lat in r:     meta["lat"] = r[lat]
+            if lng and lng in r:     meta["long"] = r[lng]
+            PLACE_MAP[k] = meta
+
+        # gabungkan knowledge places dari model & CSV
+        known_places = set(PLACE_MAP.keys()) if not known_places else (known_places | set(PLACE_MAP.keys()))
+        logging.info(f"Loaded places: {len(PLACE_MAP)} from {path}")
+        return len(PLACE_MAP)
+    except Exception as e:
+        logging.warning(f"Failed loading places.csv: {e}")
+        return 0
+
+def _add_place_metadata(recs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Lengkapi setiap item rekomendasi dengan metadata dari PLACE_MAP (kalau ada)."""
+    out: List[Dict[str, Any]] = []
+    for r in recs:
+        pid = str(r.get("place"))
+        meta = PLACE_MAP.get(pid)
+        if meta:
+            enriched = {**r, **{k: v for k, v in meta.items() if k != "place"}}
+        else:
+            enriched = r
+        out.append(enriched)
+    return out
+
 # -----------------------------------------------------------------------------
 # Lifecycle
 # -----------------------------------------------------------------------------
 @app.on_event("startup")
 def on_startup():
     _load_mlflow_model()
-    # Expose /metrics kalau lib tersedia (supaya Prometheus tidak 404)
+    _load_places_csv()
+    # Expose /metrics kalau lib tersedia (untuk Prometheus)
     try:
         from prometheus_fastapi_instrumentator import Instrumentator
         Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
@@ -224,18 +308,27 @@ def refresh_model():
         detail=f"Failed to refresh model. Status: {model_info['status']}, Error: {model_info.get('error')}",
     )
 
+@app.post("/refresh-places")
+def refresh_places():
+    n = _load_places_csv()
+    return {"message": "Places reloaded", "count": n}
+
 @app.get("/exists/user/{user_id}")
 def exists_user(user_id: str = Path(...)):
     return {"user_id": user_id, "exists": user_id in known_users}
 
 @app.get("/exists/place/{place_id}")
 def exists_place(place_id: str = Path(...)):
-    return {"place_id": place_id, "exists": place_id in known_places}
+    # cek di catalog model, fallback ke PLACE_MAP
+    ok = (place_id in known_places) or (place_id in PLACE_MAP)
+    return {"place_id": place_id, "exists": ok}
 
 @app.post("/exists")
 def exists_user_place(req: ExistenceReq = Body(...)):
     user_ok = req.user_id in known_users
-    place_ok = (req.place_id in known_places) if req.place_id else None
+    place_ok = None
+    if req.place_id is not None:
+        place_ok = (req.place_id in known_places) or (req.place_id in PLACE_MAP)
     seen = None
     if user_ok and req.place_id is not None:
         seen = req.place_id in user_seen.get(req.user_id, set())
@@ -248,10 +341,10 @@ def exists_user_place(req: ExistenceReq = Body(...)):
     }
 
 @app.post("/predict", response_model=List[RecommendationResponse])
-def predict(users: List[TourismInput]):
+def predict(users: List[TourismInput], top_n: int = Query(10, ge=1, le=50)):
     """
-    Input: [{"user_id":"123"}, {"user_id":"999"}]
-    Output: List of RecommendationResponse (satu per user)
+    Input body: [{"user_id":"123"}, {"user_id":"999"}]
+    Query param: ?top_n=5  (default 10, min 1, max 50)
     """
     if model is None or model_info["status"] != "ready":
         raise HTTPException(
@@ -273,26 +366,16 @@ def predict(users: List[TourismInput]):
 
         responses: List[RecommendationResponse] = []
         for i, u in enumerate(users):
-            try:
-                pred_i = raw_preds[i] if i < len(raw_preds) else []
-                recs = _normalize_pred_to_list_of_dict(pred_i)
-                responses.append(
-                    RecommendationResponse(
-                        user_id=u.user_id,
-                        recommendations=recs,
-                        status="success",
-                    )
+            pred_i = raw_preds[i] if i < len(raw_preds) else []
+            recs = _normalize_pred_to_list_of_dict(pred_i)[:top_n]
+            recs = _add_place_metadata(recs)  # enrich dengan places.csv
+            responses.append(
+                RecommendationResponse(
+                    user_id=u.user_id,
+                    recommendations=recs,
+                    status="success",
                 )
-            except Exception as e:
-                logging.exception(f"Prediction formatting error for user {u.user_id}: {e}")
-                responses.append(
-                    RecommendationResponse(
-                        user_id=u.user_id,
-                        recommendations=[],
-                        status=f"error: {e}",
-                    )
-                )
-
+            )
         return responses
 
     except Exception as e:

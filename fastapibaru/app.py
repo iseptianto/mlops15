@@ -381,3 +381,103 @@ def predict(users: List[TourismInput], top_n: int = Query(10, ge=1, le=50)):
     except Exception as e:
         logging.exception(f"Error during batch prediction: {e}")
         raise HTTPException(status_code=500, detail=f"Prediction error: {e}")
+
+# ====== COMPAT LAYER UNTUK FRONTEND BARU (GET endpoints) ======
+from fastapi import Query
+import math
+
+def _predict_for_one_user(user_id: str, top_n: int = 10):
+    if model is None or model_info["status"] != "ready":
+        raise HTTPException(status_code=503, detail="Model not ready")
+    df = pd.DataFrame([{"user_id": user_id}])
+    raw = model.predict(df)
+    # pastikan list
+    if isinstance(raw, np.ndarray): raw = raw.tolist()
+    if not isinstance(raw, list): raw = [raw]
+    recs = _normalize_pred_to_list_of_dict(raw[0] if raw else [])
+    recs = _add_place_metadata(recs)[:top_n]
+    return recs
+
+@app.get("/api/recommend/hybrid")
+def api_recommend_hybrid(user_id: str = Query(...), top_n: int = Query(10, ge=1, le=50)):
+    """Wrapper GET agar cocok dengan UI: kembalikan rekomendasi untuk 1 user."""
+    recs = _predict_for_one_user(user_id, top_n=top_n)
+    return {"user_id": user_id, "recommendations": recs, "status": "success"}
+
+@app.get("/api/user/profile")
+def api_user_profile(user_id: str = Query(...)):
+    """
+    Profil preferensi kategori user berdasarkan places yang pernah dilihat/rated.
+    Butuh user_seen di model & category di PLACE_MAP.
+    """
+    seen = user_seen.get(user_id, set()) if isinstance(user_seen, dict) else set()
+    if not seen:
+        return {"user_id": user_id, "preferences": [], "message": "No history"}
+    # hitung frekuensi kategori
+    from collections import Counter
+    cats = []
+    for pid in seen:
+        meta = PLACE_MAP.get(str(pid))
+        if meta and meta.get("category"):
+            cats.append(str(meta["category"]))
+    top = Counter(cats).most_common(10)
+    prefs = [{"category": c, "count": int(n)} for c, n in top]
+    return {"user_id": user_id, "preferences": prefs}
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    R = 6371.0088
+    p = math.pi/180
+    dlat = (lat2-lat1)*p
+    dlon = (lon2-lon1)*p
+    a = math.sin(dlat/2)**2 + math.cos(lat1*p)*math.cos(lat2*p)*math.sin(dlon/2)**2
+    return 2*R*math.asin(math.sqrt(a))
+
+@app.get("/api/places/nearby")
+def api_places_nearby(lat: float = Query(...), lon: float = Query(...), radius: float = Query(5.0, gt=0)):
+    """
+    Cari tempat terdekat dari koordinat (km). Perlu lat/long di places.csv
+    """
+    results = []
+    for pid, meta in PLACE_MAP.items():
+        try:
+            plat = float(meta.get("lat")); plon = float(meta.get("long"))
+        except (TypeError, ValueError):
+            continue
+        d = _haversine_km(lat, lon, plat, plon)
+        if d <= radius:
+            item = {"place": pid, **{k:v for k,v in meta.items() if k!="place"}, "distance_km": round(d, 3)}
+            results.append(item)
+    results.sort(key=lambda x: x["distance_km"])
+    return {"query": {"lat": lat, "lon": lon, "radius_km": radius}, "count": len(results), "places": results[:100]}
+
+@app.get("/api/places/similar")
+def api_places_similar(place_name: str = Query(...), limit: int = Query(10, ge=1, le=50)):
+    """
+    Cari 'mirip' sederhana: nama mengandung substring (case-insensitive),
+    lalu kalau ada kategori sama, tampilkan juga.
+    """
+    q = place_name.strip().lower()
+    # cocokin nama
+    hits = []
+    for pid, meta in PLACE_MAP.items():
+        name = str(meta.get("name") or pid)
+        if q in name.lower():
+            hits.append({"place": pid, **{k:v for k,v in meta.items() if k!="place"}})
+    if hits:
+        return {"query": place_name, "matches": hits[:limit]}
+
+    # fallback: pakai kategori yang mirip (paling umum)
+    # ambil sebagian kategori populer
+    from collections import Counter
+    cats = [str(m.get("category")) for m in PLACE_MAP.values() if m.get("category")]
+    top_cat = Counter(cats).most_common(1)
+    if not top_cat:
+        return {"query": place_name, "matches": []}
+    main_cat = top_cat[0][0]
+    matches = []
+    for pid, meta in PLACE_MAP.items():
+        if str(meta.get("category")) == main_cat:
+            matches.append({"place": pid, **{k:v for k,v in meta.items() if k!="place"}})
+        if len(matches) >= limit:
+            break
+    return {"query": place_name, "matches": matches}

@@ -104,9 +104,16 @@ services:
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_EC2_METADATA_DISABLED=true
+      - AWS_S3_ADDRESSING_STYLE=path
+    volumes:
+      - ./data:/app/data:ro   # <<< penting: supaya /app/data/places.csv kebaca
     depends_on:
-      - mlflow_server
-      - model_tourism_trainer
+      mlflow_server:
+        condition: service_started
+      minio:
+        condition: service_started
     ports:
       - "8101:8000"
     restart: unless-stopped

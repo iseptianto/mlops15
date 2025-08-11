@@ -108,7 +108,7 @@ services:
       - AWS_EC2_METADATA_DISABLED=true
       - AWS_S3_ADDRESSING_STYLE=path
     volumes:
-      - ./data:/app/data:ro   # <<< penting: supaya /app/data/places.csv kebaca
+      - ./data:/app/data:ro              # <<< supaya /app/data/places.csv kebaca
     depends_on:
       mlflow_server:
         condition: service_started
@@ -156,7 +156,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./frontend:/usr/share/nginx/html:ro      # <<— ini yang serve index.html
+      - ./frontend:/usr/share/nginx/html:ro   # <<< serve index.html
     depends_on:
       fastapi_tourism_app:
         condition: service_started
@@ -165,6 +165,7 @@ services:
       minio:
         condition: service_started
     restart: unless-stopped
+
 
 volumes:
   mlflow_db_data:

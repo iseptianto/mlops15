@@ -5,35 +5,141 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tourism Recommender</title>
   <style>
-    body{font-family:system-ui,Arial,sans-serif;max-width:680px;margin:40px auto;padding:0 16px}
-    .card{padding:16px;border:1px solid #eee;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
-    button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer}
-    input{padding:10px;border:1px solid #ddd;border-radius:10px;width:100%}
-    .row{display:flex;gap:8px}
+    :root{--b:#111;--muted:#666;--bg:#fafafa}
+    body{font-family:system-ui,Arial,sans-serif;max-width:820px;margin:40px auto;padding:0 16px;background:var(--bg);color:var(--b)}
+    h1{margin-bottom:12px}
+    .card{padding:16px;border:1px solid #eee;border-radius:14px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    label{font-size:14px;color:var(--muted)}
+    input,select{padding:10px;border:1px solid #ddd;border-radius:10px}
+    input{flex:1;min-width:220px}
+    button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer;background:#111;color:#fff}
+    .result{margin-top:14px}
+    .pill{display:inline-block;padding:6px 10px;border:1px solid #eee;border-radius:999px;margin:4px 6px 0 0;background:#fff}
+    .muted{color:var(--muted)}
+    .small{font-size:12px}
+    pre{background:#fff;border:1px solid #eee;border-radius:10px;padding:12px;overflow:auto}
   </style>
 </head>
 <body>
   <h1>Tourism Recommender</h1>
+  <p class="muted small">
+    Masukkan <b>user_id</b> (boleh lebih dari satu, pisahkan dengan koma), lalu klik Recommend.<br/>
+    API yang dipanggil: <code>POST /api/predict?top_n=..</code>
+  </p>
+
   <div class="card">
-    <label>Destination</label>
-    <div class="row">
-      <input id="dest" placeholder="e.g. Bali, Yogyakarta, Tokyo" />
+    <label for="userIds">User IDs</label>
+    <div class="row" style="margin-top:6px">
+      <input id="userIds" placeholder="contoh: 123, 999" />
+      <select id="topN" title="Top N">
+        <option value="5">top 5</option>
+        <option value="10" selected>top 10</option>
+        <option value="20">top 20</option>
+      </select>
       <button id="go">Recommend</button>
     </div>
-    <pre id="out" style="margin-top:12px;white-space:pre-wrap"></pre>
+
+    <div class="result">
+      <div id="status" class="muted small"></div>
+      <div id="cards"></div>
+    </div>
+
+    <details style="margin-top:12px">
+      <summary class="small muted">Lihat raw JSON</summary>
+      <pre id="raw"></pre>
+    </details>
   </div>
+
   <script>
-    const btn=document.getElementById('go'), out=document.getElementById('out');
-    btn.onclick=async()=>{
-      out.textContent='Loading...';
-      const destination=document.getElementById('dest').value.trim();
-      if(!destination){out.textContent='Please enter a destination.';return;}
-      try{
-        const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination})});
-        const data=await r.json();
-        out.textContent=JSON.stringify(data,null,2);
-      }catch(e){out.textContent='Error: '+e;}
+    const el = {
+      userIds: document.getElementById('userIds'),
+      topN: document.getElementById('topN'),
+      go: document.getElementById('go'),
+      status: document.getElementById('status'),
+      cards: document.getElementById('cards'),
+      raw: document.getElementById('raw'),
+    };
+
+    function parseUserIds(text){
+      return text.split(',')
+        .map(s=>s.trim())
+        .filter(Boolean)
+        .map(s=>({ user_id: s }));
     }
+
+    function renderRecommendations(data){
+      el.cards.innerHTML = '';
+      if(!Array.isArray(data) || data.length === 0){
+        el.cards.innerHTML = '<div class="muted">Tidak ada hasil.</div>';
+        return;
+      }
+      for(const row of data){
+        const box = document.createElement('div');
+        box.className = 'card';
+        box.style.marginTop = '10px';
+        const title = document.createElement('div');
+        title.innerHTML = `<b>User:</b> ${row.user_id} &nbsp; <span class="pill">${row.status}</span>`;
+        box.appendChild(title);
+
+        if(Array.isArray(row.recommendations) && row.recommendations.length){
+          const list = document.createElement('div');
+          for(const r of row.recommendations){
+            const name = r.name ?? r.place; // name dari places.csv jika ada
+            const meta = [r.city, r.category].filter(Boolean).join(' · ');
+            const pill = document.createElement('div');
+            pill.className = 'pill';
+            pill.title = meta || '';
+            pill.textContent = String(name);
+            list.appendChild(pill);
+          }
+          box.appendChild(list);
+        }else{
+          const empty = document.createElement('div');
+          empty.className = 'muted small';
+          empty.textContent = 'No recommendations';
+          box.appendChild(empty);
+        }
+        el.cards.appendChild(box);
+      }
+    }
+
+    async function recommend(){
+      const users = parseUserIds(el.userIds.value);
+      if(users.length === 0){
+        el.status.textContent = 'Isi minimal satu user_id terlebih dahulu.';
+        return;
+      }
+      const n = Number(el.topN.value) || 10;
+      el.status.textContent = 'Loading...';
+      el.raw.textContent = '';
+      el.cards.innerHTML = '';
+
+      try{
+        const res = await fetch(`/api/predict?top_n=${n}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(users)
+        });
+        const data = await res.json();
+        if(!res.ok){
+          el.status.textContent = `Error ${res.status}: ${data?.detail || 'Request gagal'}`;
+          el.raw.textContent = JSON.stringify(data, null, 2);
+          return;
+        }
+        el.status.textContent = 'OK';
+        el.raw.textContent = JSON.stringify(data, null, 2);
+        renderRecommendations(data);
+      }catch(err){
+        el.status.textContent = 'Network error: ' + err;
+      }
+    }
+
+    el.go.onclick = recommend;
+
+    // demo awal (optional): auto-coba untuk user 123
+    // el.userIds.value = '123';
+    // recommend();
   </script>
 </body>
 </html>

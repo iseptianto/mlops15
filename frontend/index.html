@@ -71,13 +71,11 @@
   // Selalu pakai path relatif → diproxy Nginx ke FastAPI
   var API_BASE = '/api';
 
-  // Helper: fetch dengan fallback XHR (buat HP yang belum support fetch)
+  // fetch dengan fallback XHR (biar HP lama tetap bisa)
   function apiFetch(url, opts){
     opts = opts || {};
-    if (window.fetch) {
-      return fetch(url, opts);
-    }
-    // XHR fallback (return Promise<response-like>)
+    if (window.fetch) return fetch(url, opts);
+
     return new Promise(function(resolve, reject){
       try{
         var xhr = new XMLHttpRequest();
@@ -89,8 +87,10 @@
             resolve({
               ok: (xhr.status >= 200 && xhr.status < 300),
               status: xhr.status,
-              json: function(){ try { return Promise.resolve(JSON.parse(xhr.responseText || 'null')); }
-                                catch(e){ return Promise.resolve(null); } }
+              json: function(){
+                try { return Promise.resolve(JSON.parse(xhr.responseText || 'null')); }
+                catch(e){ return Promise.resolve(null); }
+              }
             });
           }
         };
@@ -100,7 +100,7 @@
     });
   }
 
-  // DOM refs
+  // DOM
   var elUser   = document.getElementById('userIds');
   var elTopN   = document.getElementById('topN');
   var elGo     = document.getElementById('go');
@@ -128,17 +128,17 @@
       return;
     }
     for (var i=0;i<data.length;i++){
-      var row = data[i];
+      var row = data[i] || {};
       var box = document.createElement('div'); box.className='card'; box.style.marginTop='10px';
 
       var head = document.createElement('div');
-      var statusTxt = (row && row.status) ? row.status : 'success';
+      var statusTxt = row.status ? row.status : 'success';
       head.innerHTML = '<b>User:</b> ' + String(row.user_id || '') +
                        '&nbsp; <span class="pill">'+ statusTxt +'</span>';
       box.appendChild(head);
 
       var list = document.createElement('div');
-      var recs = (row && row.recommendations && row.recommendations.length) ? row.recommendations : [];
+      var recs = (row.recommendations && row.recommendations.length) ? row.recommendations : [];
       if (!recs.length){
         var em = document.createElement('div'); em.className='muted small'; em.textContent='No recommendations';
         box.appendChild(em);
@@ -196,14 +196,18 @@
     .catch(function(err){
       setStatus('Network error: ' + err);
     })
-    .finally ? .finally(function(){ disable(false); }) : setTimeout(function(){ disable(false); }, 0);
+    .then(function(){  // <- pengganti .finally, kompatibel ke bawah
+      disable(false);
+    });
   }
 
-  // Event
   elGo.addEventListener('click', recommend);
-  elUser.addEventListener('keydown', function(e){ if ((e.key||e.keyCode) === 'Enter' || e.keyCode === 13) recommend(); });
+  elUser.addEventListener('keydown', function(e){
+    var key = e.key || e.keyCode;
+    if (key === 'Enter' || key === 13) recommend();
+  });
 
-  // Optional: isi contoh
+  // contoh otomatis (matikan kalau tidak perlu)
   // elUser.value = '123';
   // recommend();
 })();

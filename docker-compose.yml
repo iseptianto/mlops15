@@ -1,4 +1,5 @@
-version: '3.8'
+version: "3.8"
+
 services:
   db:
     image: postgres:13
@@ -19,9 +20,11 @@ services:
   minio:
     image: minio/minio
     container_name: mlflow_minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    # ====== AMAN (disarankan): JANGAN expose ke publik ======
+    # ports:
+    #   - "9000:9000"
+    #   - "9001:9001"
+    # ====== PUBLIK (kalau memang perlu): UNCOMMENT 2 baris di atas ======
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
@@ -60,13 +63,15 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - AWS_EC2_METADATA_DISABLED=true
       - AWS_S3_ADDRESSING_STYLE=path
+      # ----------- penting agar MLflow aman & stabil via subpath -----------
+      - MLFLOW_STATIC_PREFIX=/mlflow
+      - GUNICORN_CMD_ARGS=--timeout 120 --graceful-timeout 120 --no-sendfile
     depends_on:
       db:
         condition: service_healthy
       minio:
         condition: service_started
-    ports:
-      - "5001:5001"
+    # JANGAN expose 5001: semua akses lewat Nginx
     restart: unless-stopped
 
   model_tourism_trainer:
@@ -108,7 +113,7 @@ services:
       - AWS_EC2_METADATA_DISABLED=true
       - AWS_S3_ADDRESSING_STYLE=path
     volumes:
-      - ./data:/app/data:ro              # <<< supaya /app/data/places.csv kebaca
+      - ./data:/app/data:ro
     depends_on:
       mlflow_server:
         condition: service_started
@@ -156,7 +161,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./frontend:/usr/share/nginx/html:ro   # <<< serve index.html
+      - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       fastapi_tourism_app:
         condition: service_started
@@ -165,7 +170,6 @@ services:
       minio:
         condition: service_started
     restart: unless-stopped
-
 
 volumes:
   mlflow_db_data:

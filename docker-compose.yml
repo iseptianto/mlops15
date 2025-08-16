@@ -72,6 +72,8 @@ services:
       minio:
         condition: service_started
     # JANGAN expose 5001: semua akses lewat Nginx
+    ports:
+      - "5000:5000"
     restart: unless-stopped
 
   model_tourism_trainer:

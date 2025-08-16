@@ -20,11 +20,11 @@ services:
   minio:
     image: minio/minio
     container_name: mlflow_minio
-    # ====== AMAN (disarankan): JANGAN expose ke publik ======
-    # ports:
-    #   - "9000:9000"
-    #   - "9001:9001"
-    # ====== PUBLIK (kalau memang perlu): UNCOMMENT 2 baris di atas ======
+    ====== AMAN (disarankan): JANGAN expose ke publik ======
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    ====== PUBLIK (kalau memang perlu): UNCOMMENT 2 baris di atas ======
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin

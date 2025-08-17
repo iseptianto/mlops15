@@ -1,0 +1,12 @@
+# fastapibaru/app/api/requirements.txt
+fastapi
+pandas
+scikit-learn
+numpy
+prometheus-client  # ✅ Add missing dependency
+python-multipart
+mlflow
+boto3
+psycopg2-binary
+geopy
+uvicorn[standard]

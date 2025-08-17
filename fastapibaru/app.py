@@ -280,7 +280,7 @@ def root():
         "model_error": model_info["error"],
     }
 
-@app.get("/api/health")
+@app.get("/health")
 def health():
     is_ready = (model is not None) and (model_info["status"] == "ready")
     return {
@@ -289,7 +289,7 @@ def health():
         "status": model_info["status"],
     }
 
-@app.get("/api/model-info")
+@app.get("/model-info")
 def get_model_info():
     return {
         **model_info,
@@ -297,7 +297,7 @@ def get_model_info():
         "num_known_places": len(known_places),
     }
 
-@app.post("/api/refresh-model")
+@app.post("/refresh-model")
 def refresh_model():
     logging.info("Manual model refresh requested.")
     _load_mlflow_model()
@@ -308,22 +308,22 @@ def refresh_model():
         detail=f"Failed to refresh model. Status: {model_info['status']}, Error: {model_info.get('error')}",
     )
 
-@app.post("/api/refresh-places")
+@app.post("/refresh-places")
 def refresh_places():
     n = _load_places_csv()
     return {"message": "Places reloaded", "count": n}
 
-@app.get("/api/exists/user/{user_id}")
+@app.get("/exists/user/{user_id}")
 def exists_user(user_id: str = Path(...)):
     return {"user_id": user_id, "exists": user_id in known_users}
 
-@app.get("/api/exists/place/{place_id}")
+@app.get("/exists/place/{place_id}")
 def exists_place(place_id: str = Path(...)):
     # cek di catalog model, fallback ke PLACE_MAP
     ok = (place_id in known_places) or (place_id in PLACE_MAP)
     return {"place_id": place_id, "exists": ok}
 
-@app.post("/api/exists")
+@app.post("/exists")
 def exists_user_place(req: ExistenceReq = Body(...)):
     user_ok = req.user_id in known_users
     place_ok = None
@@ -340,7 +340,7 @@ def exists_user_place(req: ExistenceReq = Body(...)):
         "user_has_seen_or_rated_place": seen,
     }
 
-@app.post("/api/predict", response_model=List[RecommendationResponse])
+@app.post("/predict", response_model=List[RecommendationResponse])
 def predict(users: List[TourismInput], top_n: int = Query(10, ge=1, le=50)):
     """
     Input body: [{"user_id":"123"}, {"user_id":"999"}]

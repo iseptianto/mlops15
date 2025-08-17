@@ -1,216 +1,39 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tourism Recommender</title>
-
   <style>
-    :root{--fg:#111;--muted:#666;--bg:#fafafa;--card:#fff;--bd:#eee}
-    *{box-sizing:border-box}
-    body{font-family:system-ui,Arial,sans-serif;margin:0;background:var(--bg);color:var(--fg)}
-    .wrap{max-width:820px;margin:28px auto;padding:0 16px}
-    h1{margin:0 0 8px}
-    .small{font-size:12px}
-    .muted{color:var(--muted)}
-    .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
-    .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
-    label{font-size:14px;color:var(--muted)}
-    input,select{padding:10px;border:1px solid #ddd;border-radius:10px;background:#fff;color:inherit}
-    input{flex:1;min-width:220px}
-    button{padding:10px 16px;border:0;border-radius:10px;background:#111;color:#fff;cursor:pointer}
-    button[disabled]{opacity:.6;cursor:not-allowed}
-    .pill{display:inline-block;padding:6px 10px;border:1px solid var(--bd);border-radius:999px;margin:4px 6px 0 0;background:#fff;white-space:nowrap}
-    .sec{margin-top:12px}
-    pre{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:12px;overflow:auto}
-    details summary{cursor:pointer}
+    body{font-family:system-ui,Arial,sans-serif;max-width:680px;margin:40px auto;padding:0 16px}
+    .card{padding:16px;border:1px solid #eee;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    button{padding:10px 16px;border:0;border-radius:10px;cursor:pointer}
+    input{padding:10px;border:1px solid #ddd;border-radius:10px;width:100%}
+    .row{display:flex;gap:8px}
   </style>
 </head>
 <body>
-<noscript>
-  <div class="wrap"><div class="card">This page requires JavaScript.</div></div>
-</noscript>
-
-<div class="wrap">
   <h1>Tourism Recommender</h1>
-  <p class="muted small">
-    Masukkan <b>user_id</b> (bisa lebih dari satu, pisahkan dengan koma), lalu klik <b>Recommend</b>.<br>
-    API: <code>POST /api/predict?top_n=..</code>
-  </p>
-
   <div class="card">
-    <label for="userIds">User IDs</label>
+    <label>Destination</label>
     <div class="row">
-      <input id="userIds" placeholder="misal: 123, 999" autocomplete="off">
-      <select id="topN" title="Top N">
-        <option value="5">top 5</option>
-        <option value="10" selected>top 10</option>
-        <option value="20">top 20</option>
-      </select>
+      <input id="dest" placeholder="e.g. Bali, Yogyakarta, Tokyo" />
       <button id="go">Recommend</button>
     </div>
-
-    <div class="sec small muted" id="status"></div>
-    <div class="sec" id="cards"></div>
-
-    <details class="sec">
-      <summary class="small muted">Lihat raw JSON</summary>
-      <pre id="raw"></pre>
-    </details>
+    <pre id="out" style="margin-top:12px;white-space:pre-wrap"></pre>
   </div>
-</div>
-
-<script>
-(function(){
-  'use strict';
-
-  // Selalu pakai path relatif → diproxy Nginx ke FastAPI
-  var API_BASE = '/api';
-
-  // fetch dengan fallback XHR (biar HP lama tetap bisa)
-  function apiFetch(url, opts){
-    opts = opts || {};
-    if (window.fetch) return fetch(url, opts);
-
-    return new Promise(function(resolve, reject){
+  <script>
+    const btn=document.getElementById('go'), out=document.getElementById('out');
+    btn.onclick=async()=>{
+      out.textContent='Loading...';
+      const destination=document.getElementById('dest').value.trim();
+      if(!destination){out.textContent='Please enter a destination.';return;}
       try{
-        var xhr = new XMLHttpRequest();
-        xhr.open((opts.method || 'GET').toUpperCase(), url, true);
-        var headers = (opts.headers || {});
-        for (var k in headers){ if (headers.hasOwnProperty(k)) xhr.setRequestHeader(k, headers[k]); }
-        xhr.onreadystatechange = function(){
-          if (xhr.readyState === 4){
-            resolve({
-              ok: (xhr.status >= 200 && xhr.status < 300),
-              status: xhr.status,
-              json: function(){
-                try { return Promise.resolve(JSON.parse(xhr.responseText || 'null')); }
-                catch(e){ return Promise.resolve(null); }
-              }
-            });
-          }
-        };
-        xhr.onerror = function(){ reject(new Error('Network error')); };
-        xhr.send(opts.body || null);
-      }catch(e){ reject(e); }
-    });
-  }
-
-  // DOM
-  var elUser   = document.getElementById('userIds');
-  var elTopN   = document.getElementById('topN');
-  var elGo     = document.getElementById('go');
-  var elStatus = document.getElementById('status');
-  var elCards  = document.getElementById('cards');
-  var elRaw    = document.getElementById('raw');
-
-  function parseUserIds(text){
-    var parts = (text || '').split(',');
-    var out = [];
-    for (var i=0;i<parts.length;i++){
-      var s = parts[i].replace(/\s+/g,'').trim();
-      if (s) out.push({ user_id: s });
+        const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination})});
+        const data=await r.json();
+        out.textContent=JSON.stringify(data,null,2);
+      }catch(e){out.textContent='Error: '+e;}
     }
-    return out;
-  }
-
-  function setStatus(msg){ elStatus.textContent = msg || ''; }
-  function setRaw(obj){ try{ elRaw.textContent = JSON.stringify(obj, null, 2); }catch(e){ elRaw.textContent = String(obj); } }
-
-  function render(data){
-    elCards.innerHTML = '';
-    if (!data || Object.prototype.toString.call(data) !== '[object Array]' || !data.length){
-      elCards.innerHTML = '<div class="muted">Tidak ada hasil.</div>';
-      return;
-    }
-    for (var i=0;i<data.length;i++){
-      var row = data[i] || {};
-      var box = document.createElement('div'); box.className='card'; box.style.marginTop='10px';
-
-      var head = document.createElement('div');
-      var statusTxt = row.status ? row.status : 'success';
-      head.innerHTML = '<b>User:</b> ' + String(row.user_id || '') +
-                       '&nbsp; <span class="pill">'+ statusTxt +'</span>';
-      box.appendChild(head);
-
-      var list = document.createElement('div');
-      var recs = (row.recommendations && row.recommendations.length) ? row.recommendations : [];
-      if (!recs.length){
-        var em = document.createElement('div'); em.className='muted small'; em.textContent='No recommendations';
-        box.appendChild(em);
-      } else {
-        for (var j=0;j<recs.length;j++){
-          var r = recs[j] || {};
-          var name = r.name ? r.name : (r.place ? String(r.place) : '');
-          var meta = [];
-          if (r.city) meta.push(String(r.city));
-          if (r.category) meta.push(String(r.category));
-          var pill = document.createElement('div');
-          pill.className='pill';
-          pill.title = meta.join(' · ');
-          pill.textContent = name;
-          list.appendChild(pill);
-        }
-        box.appendChild(list);
-      }
-      elCards.appendChild(box);
-    }
-  }
-
-  function disable(b){ elGo.disabled = !!b; }
-
-  function recommend(){
-    var users = parseUserIds(elUser.value);
-    if (!users.length){ setStatus('Isi minimal satu user_id.'); return; }
-
-    var n = parseInt(elTopN.value, 10) || 10;
-    setStatus('Loading...');
-    setRaw('');
-    elCards.innerHTML = '';
-    disable(true);
-
-    apiFetch(API_BASE + '/predict?top_n=' + encodeURIComponent(n), {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify(users)
-    })
-    .then(function(res){
-      return res.json().then(function(data){ return { ok: res.ok, status: res.status, data: data }; });
-    })
-    .then(function(r){
-      if (!r.ok){
-        var msg = 'Error ' + r.status;
-        if (r.data && r.data.detail) msg += ': ' + (typeof r.data.detail === 'string' ? r.data.detail : JSON.stringify(r.data.detail));
-        setStatus(msg);
-        setRaw(r.data);
-        return;
-      }
-      setStatus('OK');
-      setRaw(r.data);
-      render(r.data);
-    })
-    .catch(function(err){
-      setStatus('Network error: ' + err);
-    })
-    .then(function(){  // <- pengganti .finally, kompatibel ke bawah
-      disable(false);
-    });
-  }
-
-  elGo.addEventListener('click', recommend);
-  elUser.addEventListener('keydown', function(e){
-    var key = e.key || e.keyCode;
-    if (key === 'Enter' || key === 13) recommend();
-  });
-
-  // contoh otomatis (matikan kalau tidak perlu)
-  // elUser.value = '123';
-  // recommend();
-})();
-</script>
+  </script>
 </body>
 </html>

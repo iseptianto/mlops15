@@ -92,7 +92,7 @@ services:
       - ./data:/app/data
     command: >
       python train_recsys.py
-      --ratings_csv /app/data/dataset.csv
+      --ratings_csv /data/dataset.csv
       --user_col user_id
       --item_col item_id
       --rating_col rating

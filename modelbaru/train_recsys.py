@@ -3,7 +3,22 @@ import os, argparse, pickle
 import pandas as pd
 import mlflow, mlflow.pyfunc
 from mlflow.tracking import MlflowClient
+from mlflow.models import infer_signature
 
+# misal df_train adalah DataFrame input (user_id, item_id, rating)
+input_example = df.head(5)[["user_id", "item_id"]]   # atau kolom fitur yang dipakai predict
+y_example = model.predict(input_example)             # sesuaikan API modelmu
+
+signature = infer_signature(input_example, y_example)
+
+mlflow.sklearn.log_model(
+    sk_model=model,
+    artifact_path="model",
+    registered_model_name=os.getenv("MLFLOW_REGISTERED_MODEL", "tourism-recommender-model"),
+    signature=signature,
+    input_example=input_example,
+)
+s
 class RecsysModel(mlflow.pyfunc.PythonModel):
     def load_context(self, context):
         import pickle, os

@@ -103,30 +103,30 @@ services:
       --model rf
     restart: "no"
 
- fastapi_tourism_app:
-  build: ./fastapibaru
-  container_name: fastapi_tourism_app
-  command: uvicorn fastapibaru.app:app --host 0.0.0.0 --port 8000
-  environment:
-    - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-    - AWS_ACCESS_KEY_ID=minioadmin
-    - AWS_SECRET_ACCESS_KEY=minioadmin
-    - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-    # (opsional) - MODEL_NAME=tourism-recommender-model
-    # (opsional) - MODEL_ALIAS=production
-  depends_on:
-    mlflow_server:
-      condition: service_started
-    # model_tourism_trainer biasanya job sekali jalan; tidak wajib jadi dependee
-  ports:
-    - "8101:8000"
-  healthcheck:
-    test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-    interval: 10s
-    timeout: 3s
-    retries: 10
-    start_period: 10s
-  restart: unless-stopped
+  fastapi_tourism_app:
+    build: ./fastapibaru
+    container_name: fastapi_tourism_app
+    command: uvicorn fastapibaru.app:app --host 0.0.0.0 --port 8000
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5001
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      # (opsional) - MODEL_NAME=tourism-recommender-model
+      # (opsional) - MODEL_ALIAS=production
+    depends_on:
+      mlflow_server:
+        condition: service_started
+      # model_tourism_trainer biasanya job sekali jalan; tidak wajib jadi dependee
+    ports:
+      - "8101:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
 
 
   prometheus_server:

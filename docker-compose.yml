@@ -100,18 +100,17 @@ services:
       mlflow_server:
         condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ./data:/app/data
     command: >
       python train_recsys.py
-      --ratings_csv /data/dataset.csv
+      --ratings_csv /app/data/dataset.csv
       --user_col user_id
       --item_col item_id
       --rating_col rating
       --registered_model tourism-recommender-model
     restart: "no"
-
 
   fastapi_tourism_app:
     build: ./fastapibaru

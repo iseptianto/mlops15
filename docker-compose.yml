@@ -1,3 +1,4 @@
+version: '3.8'
 services:
   db:
     image: postgres:13
@@ -9,45 +10,37 @@ services:
     volumes:
       - mlflow_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      test: ["CMD-SHELL","pg_isready -U mlflow -d mlflow"]
       interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 10s
     restart: unless-stopped
 
   minio:
     image: minio/minio
     container_name: mlflow_minio
-    command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
+    entrypoint: >
+      sh -c "minio server /data --console-address ':9001'"
     volumes:
       - mlflow_minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
     restart: unless-stopped
 
   minio-mc:
     image: minio/mc
-    container_name: minio_mc
     depends_on:
-      minio:
-        condition: service_healthy
+      - minio
     environment:
       - MC_HOST_local=http://minioadmin:minioadmin@minio:9000
     entrypoint: >
       sh -c "
-        until (mc ready local); do sleep 1; done &&
-        mc mb -p local/mlflow || true
+      until (mc ready local); do sleep 1; done &&
+      mc mb -p local/mlflow || true
       "
     restart: "no"
 
@@ -71,15 +64,9 @@ services:
       db:
         condition: service_healthy
       minio:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "5001:5001"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5001/ | grep -qi mlflow || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
     restart: unless-stopped
 
   model_tourism_trainer:
@@ -97,14 +84,12 @@ services:
       - AWS_S3_ADDRESSING_STYLE=path
       - MLFLOW_REGISTERED_MODEL=tourism-recommender-model
     depends_on:
-      mlflow_server:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
+      - mlflow_server
+      - minio
     volumes:
       - ./data:/app/data
     command: >
-      python train_recsys.py
+      python train.py
       --data_csv /app/data/dataset.csv
       --target target
       --task auto
@@ -114,38 +99,28 @@ services:
   fastapi_tourism_app:
     build: ./fastapibaru
     container_name: fastapi_tourism_app
-    command: uvicorn fastapibaru.app:app --host 0.0.0.0 --port 8000
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     depends_on:
-      mlflow_server:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
+      - mlflow_server
+      - model_tourism_trainer
     ports:
       - "8101:8000"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
     restart: unless-stopped
 
   prometheus_server:
     image: prom/prometheus:v2.45.0
     container_name: prometheus_server
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
     depends_on:
-      fastapi_tourism_app:
-        condition: service_healthy
+      - fastapi_tourism_app
     ports:
       - "9090:9090"
     restart: unless-stopped
@@ -162,8 +137,7 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
     depends_on:
-      prometheus_server:
-        condition: service_started
+      - prometheus_server
     ports:
       - "3000:3000"
     restart: unless-stopped
@@ -175,10 +149,12 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./frontend:/usr/share/nginx/html:ro
     depends_on:
-      fastapi_tourism_app:
-        condition: service_healthy
+      - fastapi_tourism_app
+      - mlflow_server
+      - grafana_server
+      - prometheus_server
+      - minio
     restart: unless-stopped
 
 volumes:
@@ -186,5 +162,3 @@ volumes:
   mlflow_minio_data:
   prometheus_data:
   grafana_data:
-  nginx_data:
-  

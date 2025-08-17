@@ -19,28 +19,30 @@ services:
   minio:
     image: minio/minio
     container_name: mlflow_minio
+    command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin
-    entrypoint: >
-      sh -c "minio server /data --console-address ':9001'"
     volumes:
       - mlflow_minio_data:/data
     restart: unless-stopped
 
+
   minio-mc:
     image: minio/mc
+    container_name: minio_mc
     depends_on:
-      - minio
+      minio:
+        condition: service_started
     environment:
       - MC_HOST_local=http://minioadmin:minioadmin@minio:9000
     entrypoint: >
       sh -c "
-      until (mc ready local); do sleep 1; done &&
-      mc mb -p local/mlflow || true
+        until (mc ready local); do sleep 1; done &&
+        mc mb -p local/mlflow || true
       "
     restart: "no"
 
@@ -67,7 +69,18 @@ services:
         condition: service_started
     ports:
       - "5001:5001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python - <<'PY'\nimport urllib.request,sys\ntry:\n  urllib.request.urlopen('http://localhost:5001/',timeout=3)\n  sys.exit(0)\nexcept Exception:\n  sys.exit(1)\nPY"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     restart: unless-stopped
+
 
   model_tourism_trainer:
     build:
@@ -103,23 +116,29 @@ services:
   fastapi_tourism_app:
     build: ./fastapibaru
     container_name: fastapi_tourism_app
+    command: uvicorn fastapibaru.app:app --host 0.0.0.0 --port 8000
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
-      - AWS_DEFAULT_REGION=us-east-1
-      - AWS_EC2_METADATA_DISABLED=true
-      - AWS_S3_ADDRESSING_STYLE=path
-    volumes:
-      - ./data:/app/data:ro              # <<< supaya /app/data/places.csv kebaca
     depends_on:
       mlflow_server:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_started
     ports:
       - "8101:8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python - <<'PY'\nimport urllib.request,sys\ntry:\n  urllib.request.urlopen('http://localhost:8000/health',timeout=3)\n  sys.exit(0)\nexcept Exception:\n  sys.exit(1)\nPY"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     restart: unless-stopped
 
   prometheus_server:

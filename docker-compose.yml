@@ -10,10 +10,10 @@ services:
     volumes:
       - mlflow_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U mlflow -d mlflow"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
     restart: unless-stopped
 
   minio:
@@ -30,19 +30,18 @@ services:
       - mlflow_minio_data:/data
     restart: unless-stopped
 
-
   minio-mc:
     image: minio/mc
     container_name: minio_mc
     depends_on:
-      minio:
-        condition: service_started
+      - minio
     environment:
       - MC_HOST_local=http://minioadmin:minioadmin@minio:9000
     entrypoint: >
       sh -c "
-        until (mc ready local); do sleep 1; done &&
-        mc mb -p local/mlflow || true
+        until (mc ready local); do echo 'Waiting for MinIO...' && sleep 1; done &&
+        mc mb -p local/mlflow || true &&
+        echo 'MinIO bucket created successfully'
       "
     restart: "no"
 
@@ -70,17 +69,12 @@ services:
     ports:
       - "5001:5001"
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python - <<'PY'\nimport urllib.request,sys\ntry:\n  urllib.request.urlopen('http://localhost:5001/',timeout=3)\n  sys.exit(0)\nexcept Exception:\n  sys.exit(1)\nPY"
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
-
 
   model_tourism_trainer:
     build:
@@ -88,7 +82,7 @@ services:
     container_name: modelbaru_trainer
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
-      - MLFLOW_EXPERIMENT=modelbaru
+      - MLFLOW_EXPERIMENT=tourism-recommendation
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
@@ -96,54 +90,55 @@ services:
       - AWS_EC2_METADATA_DISABLED=true
       - AWS_S3_ADDRESSING_STYLE=path
       - MLFLOW_REGISTERED_MODEL=tourism-recommender-model
-      - GIT_PYTHON_REFRESH=quiet        # hilangin warning git
+      - GIT_PYTHON_REFRESH=quiet
     depends_on:
       mlflow_server:
         condition: service_healthy
-      minio:
-        condition: service_started      # <— penting: JANGAN service_healthy
     volumes:
-      - ./modelbaru/app/data:/app/data  # pastikan dataset.csv ada di sini
+      - ./modelbaru/data:/app/data
     command: >
-      python train_recsys.py
-      --ratings_csv /app/data/dataset.csv
-      --user_col user_id
-      --item_col item_id
-      --rating_col rating
-      --registered_model tourism-recommender-model
+      sh -c "
+        echo 'Starting model training...' &&
+        python train_recsys.py
+        --ratings_csv /app/data/dataset.csv
+        --user_col user_id
+        --item_col place_id
+        --rating_col rating
+        --registered_model tourism-recommender-model
+      "
     restart: "no"
-    # opsional biar trainer cuma jalan saat diminta:
-    # profiles: ["train"]
-
 
   fastapi_tourism_app:
-    build: ./fastapibaru
+    build: 
+      context: ./fastapibaru
+      dockerfile: Dockerfile
     container_name: fastapi_tourism_app
-    command: uvicorn fastapibaru.app:app --host 0.0.0.0 --port 8000
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow_server:5001
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_EC2_METADATA_DISABLED=true
+      - AWS_S3_ADDRESSING_STYLE=path
       - MODEL_NAME=tourism-recommender-model
       - MODEL_ALIAS=production
+      - PLACES_CSV_PATH=/app/data/places.csv
     depends_on:
       mlflow_server:
         condition: service_healthy
-      minio:
-        condition: service_started
+      model_tourism_trainer:
+        condition: service_completed_successfully
     ports:
-      - "8101:8000"
+      - "8000:8000"
+    volumes:
+      - ./fastapibaru/data:/app/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python - <<'PY'\nimport urllib.request,sys\ntry:\n  urllib.request.urlopen('http://localhost:8000/health',timeout=3)\n  sys.exit(0)\nexcept Exception:\n  sys.exit(1)\nPY"
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
     restart: unless-stopped
 
   prometheus_server:
@@ -154,8 +149,13 @@ services:
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
     depends_on:
-      - fastapi_tourism_app
+      fastapi_tourism_app:
+        condition: service_healthy
     ports:
       - "9090:9090"
     restart: unless-stopped
@@ -167,10 +167,10 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana2/datasources:/etc/grafana/provisioning/datasources
       - ./grafana2/dashboards:/etc/grafana/provisioning/dashboards
-      - ./grafana2/dashboards:/etc/grafana/provisioning/dashboards/dashboards
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
     depends_on:
       - prometheus_server
     ports:
@@ -184,16 +184,13 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./frontend:/usr/share/nginx/html:ro   # <<< serve index.html
+      - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       fastapi_tourism_app:
-        condition: service_started
+        condition: service_healthy
       mlflow_server:
-        condition: service_started
-      minio:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
-
 
 volumes:
   mlflow_db_data:
